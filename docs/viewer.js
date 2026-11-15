@@ -8,7 +8,8 @@
   const map = globalThis.ISOCITY_MAP;
   let image, picking, frame;
   let scale = 1, x = 0, y = 0, width = 0, height = 0, dpr = 1;
-  let hover = null, gesture = null;
+  let hover = null, gesture = null, tap = null, touchLabel = false;
+  const touchOnly = matchMedia('(hover: none)');
   const pointers = new Map();
 
   function draw() {
@@ -25,9 +26,14 @@
     const id = picking[offset] + 256 * picking[offset + 1];
     if (!map.names[id - 1] || picking[offset + 2] !== ((id * 113) & 255)) return;
     label.textContent = map.names[id - 1];
-    label.style.left = `${hover.x}px`;
-    label.style.top = `${hover.y}px`;
+    label.classList.toggle('touch', touchLabel);
     label.style.display = 'block';
+    // Keep the label inside the screen; on touch it sits above the finger.
+    const w = label.offsetWidth;
+    const left = touchLabel ? Math.max(w / 2 + 8, Math.min(width - w / 2 - 8, hover.x))
+      : (hover.x + 12 + w > width - 8 ? Math.max(8 - 12, hover.x - w - 24) : hover.x);
+    label.style.left = `${left}px`;
+    label.style.top = `${touchLabel ? Math.max(hover.y, label.offsetHeight + 26) : hover.y}px`;
   }
 
   function schedule() {
@@ -78,6 +84,8 @@
     canvas.setPointerCapture(event.pointerId);
     pointers.set(event.pointerId, position(event));
     hover = null;
+    // A short press that barely moves is a tap: it selects the building under the finger.
+    tap = pointers.size === 1 ? {...position(event), time: event.timeStamp} : null;
     beginGesture();
     schedule();
   });
@@ -85,17 +93,27 @@
     const point = position(event);
     if (pointers.has(event.pointerId)) {
       pointers.set(event.pointerId, point);
+      if (tap && (pointers.size > 1 || Math.hypot(point.x - tap.x, point.y - tap.y) > 8)) tap = null;
       const [a, b] = pointers.values();
       anchorZoom(gesture.anchor, b ? midpoint(a, b) : a, gesture,
         b ? distance(a, b) / gesture.distance : 1);
     } else if (!pointers.size && event.pointerType !== 'touch') {
       hover = point;
+      touchLabel = false;
       schedule();
     }
   });
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
     canvas.addEventListener(type, event => {
-      if (pointers.delete(event.pointerId)) beginGesture();
+      if (type === 'pointerup' && tap && event.timeStamp - tap.time < 600) {
+        hover = position(event);
+        touchLabel = event.pointerType !== 'mouse';
+      }
+      if (pointers.delete(event.pointerId)) {
+        if (!pointers.size) tap = null;
+        beginGesture();
+        schedule();
+      }
     });
   }
   canvas.addEventListener('pointerleave', () => { hover = null; schedule(); });
@@ -107,6 +125,11 @@
     anchorZoom(point, point, {x, y, scale}, Math.exp(-event.deltaY * unit * .001));
   }, {passive: false});
   document.querySelector('#reset').addEventListener('click', reset);
+  // Attributions live in the About dialog; click outside it, Escape or the button closes it.
+  const about = document.querySelector('#about-dialog');
+  document.querySelector('#about').addEventListener('click', () => about.showModal());
+  document.querySelector('#about-close').addEventListener('click', () => about.close());
+  about.addEventListener('click', event => { if (event.target === about) about.close(); });
   window.addEventListener('resize', resize);
   resize();
 
@@ -129,7 +152,11 @@
       source.textContent = 'Powered by CRTM';
       credit.append(' · ', source, ' (datos elaborados)');
     }
-    status.textContent = map.summary;
+    // Touch screens have no hover: the status line tells people to tap instead.
+    const touchSummary = 'Toca un edificio, parada o acceso de Metro para ver qué es.';
+    status.textContent = touchOnly.matches ? touchSummary : map.summary;
+    document.querySelector('.hint').innerHTML = touchOnly.matches
+      ? 'Arrastra para moverte<br>Pellizca para ampliar' : document.querySelector('.hint').innerHTML;
     reset();
     const ids = await loadImage(map.picking);
     const buffer = document.createElement('canvas');
