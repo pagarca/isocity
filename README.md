@@ -4,6 +4,7 @@ Mapa isométrico dimétrico 2:1, en estilo pixel art, del entorno de la plaza de
 construido solo con fuentes abiertas y públicas.
 
 **Visor:** https://pagarca.github.io/isocity/
+**Visor de Prado y Atocha** (tesela contigua al sur): https://pagarca.github.io/isocity/prado/
 
 Se arrastra para moverse, la rueda o el pellizco amplían, y al pasar el cursor sobre un edificio aparece
 su identificador municipal `ID_3D`.
