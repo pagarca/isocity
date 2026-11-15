@@ -81,7 +81,7 @@
 
   canvas.addEventListener('pointerdown', event => {
     if (!image || pointers.size >= 2) return;
-    canvas.setPointerCapture(event.pointerId);
+    try { canvas.setPointerCapture(event.pointerId); } catch { /* synthetic or already released pointer */ }
     pointers.set(event.pointerId, position(event));
     hover = null;
     // A short press that barely moves is a tap: it selects the building under the finger.
@@ -116,7 +116,8 @@
       }
     });
   }
-  canvas.addEventListener('pointerleave', () => { hover = null; schedule(); });
+  // Touch pointers also fire pointerleave right after pointerup, which would erase the tapped selection.
+  canvas.addEventListener('pointerleave', event => { if (event.pointerType === 'mouse') { hover = null; schedule(); } });
   canvas.addEventListener('wheel', event => {
     event.preventDefault();
     if (!image) return;
